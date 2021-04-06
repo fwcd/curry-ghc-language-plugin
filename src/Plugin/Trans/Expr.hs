@@ -625,7 +625,7 @@ liftMonadicExpr given tcs (L l (XExpr (WrapExpr (HsWrap w e)))) = do
   return (L l (mkHsWrap w' e'))
 liftMonadicExpr _ _ (L _ (HsUnboundVar _ _)) = undefined
 liftMonadicExpr _ _ (L _ (HsRecFld _ _)) = undefined
-liftMonadicExpr _ _ (L _ (HsOverLabel _ _ _)) = undefined
+liftMonadicExpr _ _ (L _ (HsOverLabel _ _)) = undefined
 liftMonadicExpr _ _ (L _ (HsIPVar _ _)) = undefined
 liftMonadicExpr _ _ (L _ (HsRnBracketOut _ _ _)) = undefined
 liftMonadicExpr _ _ (L _ (HsConLikeOut _ _)) = undefined

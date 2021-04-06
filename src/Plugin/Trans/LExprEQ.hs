@@ -21,7 +21,7 @@ import GHC.Tc.Types.Evidence
 import GHC.Core.TyCo.Rep
 
 viewLExprEq :: (LHsExpr GhcTc,Type) -> (LHsExpr GhcTc,Type) -> Bool
-viewLExprEq (e1Orig,_) (e2Orig,_) = lexp e1Orig e2Orig
+viewLExprEq (e1,_) (e2,_) = lexp e1 e2
   where
     lexp :: LHsExpr GhcTc -> LHsExpr GhcTc -> Bool
     lexp e e' = exp (unLoc e) (unLoc e')
@@ -43,7 +43,6 @@ viewLExprEq (e1Orig,_) (e2Orig,_) = lexp e1Orig e2Orig
     -- the instance for IPName derives using the id, so this works if the
     -- above does
     exp (HsIPVar _ i) (HsIPVar _ i') = i == i'
-    exp (HsOverLabel _ l x) (HsOverLabel _ l' x') = l == l' && x == x'
     exp (HsOverLit _ l) (HsOverLit _ l') =
         -- Overloaded lits are equal if they have the same type
         -- and the data is the same.
@@ -89,8 +88,8 @@ viewLExprEq (e1Orig,_) (e2Orig,_) = lexp e1Orig e2Orig
     syn_exp _              _              = False
 
     ---------
-    tup_arg (L _ (Present _ e1)) (L _ (Present _ e2)) = lexp e1 e2
-    tup_arg (L _ (Missing (Scaled _ t1)))   (L _ (Missing (Scaled _ t2)))   = eqType t1 t2
+    tup_arg (Present _ e1)           (Present _ e2)         = lexp e1 e2
+    tup_arg (Missing (Scaled _ t1)) (Missing (Scaled _ t2)) = eqType t1 t2
     tup_arg _ _ = False
 
     ---------
@@ -113,8 +112,17 @@ viewLExprEq (e1Orig,_) (e2Orig,_) = lexp e1Orig e2Orig
 
     ---------
     ev_term :: EvTerm -> EvTerm -> Bool
-    ev_term (EvExpr (Var a)) (EvExpr  (Var b)) = a==b
-    ev_term (EvExpr (Coercion a)) (EvExpr (Coercion b)) = a `eqCoercion` b
+    ev_term (EvExpr (Var a)) (EvExpr  (Var b))
+      = idType a `eqType` idType b
+        -- The /type/ of the evidence matters, not its precise proof term.
+        -- Caveat: conceivably a sufficiently exotic use of incoherent instances
+        -- could make a difference, but remember this is only used within the
+        -- pattern matches for a single function, so it's hard to see how that
+        -- could really happen.  And we don't want accidentally different proofs
+        -- to prevent spotting equalities, and hence degrade pattern-match
+        -- overlap checking.
+    ev_term (EvExpr (Coercion a)) (EvExpr (Coercion b))
+      = a `eqCoercion` b
     ev_term _ _ = False
 
     ---------

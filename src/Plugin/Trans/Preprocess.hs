@@ -226,7 +226,7 @@ preprocessExpr tcs (L l (XExpr (WrapExpr (HsWrap w e)))) = do
     _ -> return (L l (XExpr (WrapExpr (HsWrap w e'))))
 preprocessExpr _ (L _ (HsUnboundVar _ _)) = undefined
 preprocessExpr _ (L _ (HsRecFld _ _)) = undefined
-preprocessExpr _ (L _ (HsOverLabel _ _ _)) = undefined
+preprocessExpr _ (L _ (HsOverLabel _ _)) = undefined
 preprocessExpr _ e@(L l (HsIPVar _ _)) = do
   flags <- getDynFlags
   reportError (mkErrMsg flags l neverQualify

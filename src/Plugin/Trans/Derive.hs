@@ -11,6 +11,7 @@ We create deriving declarations for Generic, Shareable and Normalform.
 module Plugin.Trans.Derive (mkDerivings) where
 
 import Data.Maybe
+import Language.Haskell.Syntax        ( noExtField )
 
 import GHC.Hs.Extension
 import GHC.Hs.Type

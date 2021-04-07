@@ -9,6 +9,7 @@ This module contains various utility functions.
 -}
 module Plugin.Trans.Util where
 
+import Language.Haskell.Syntax        ( noExtField )
 import Language.Haskell.TH            ( Exp, Q, runQ )
 import Control.Monad.IO.Class
 import Data.Tuple.Extra
@@ -19,6 +20,7 @@ import Data.ByteString                ( unpack )
 
 import GHC.HsToCore
 import GHC.ThToHs
+import GHC.Parser.Annotation          ( noLocA )
 import GHC.Plugins
 import GHC.Hs.Extension
 import GHC.Hs.Expr
@@ -72,7 +74,7 @@ mkNewAny ex ty = do
 
 mkNewPs :: RdrName -> Type -> TcM (LHsExpr GhcTc)
 mkNewPs nm ty = do
-  let ps_expr = noLoc (HsVar noExtField (noLoc nm))
+  let ps_expr = noLocA (HsVar noExtField (noLocA nm))
   fmap fst (rnLExpr ps_expr) >>= flip tcCheckMonoExpr ty
 
 -- | Get the type of the given expression or return Nothing

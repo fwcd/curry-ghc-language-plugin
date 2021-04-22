@@ -50,7 +50,7 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
   let newbdy = mkHsAppTy clsty (foldr appVars newtyconty (reverse newvars))
   let newty = newbdy
   -- Add the type variables to the set of bound variables.
-  let newinstty = mkEmptyWildCardBndrs $ HsIB newvars newty
+  let newinstty = mkEmptyWildCardBndrs newty
   -- Create the deriving declaration for the lifted type constructor.
   let newdecl = DerivDecl noExtField newinstty Nothing Nothing
 
@@ -59,7 +59,7 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
   let oldvars = map varName $ tyConTyVars old
   let oldbdy = mkHsAppTy clsty (foldr appVars oldtyconty oldvars)
   let oldty = oldbdy
-  let oldinstty = mkEmptyWildCardBndrs $ HsIB oldvars oldty
+  let oldinstty = mkEmptyWildCardBndrs oldty
   let olddecl = DerivDecl noExtField oldinstty Nothing Nothing
 
   return [noLoc newdecl, noLoc olddecl]
@@ -94,7 +94,7 @@ mkDerivingShare (_, tycon) | isVanillaAlgTyCon tycon = do
   let bdy = mkHsAppTy clsty (foldr appVars tyconty (reverse varsname))
   -- Include all Shareable contexts in the type and
   -- add the type variables to the set of bound variables.
-  let ib = HsIB varsname (noLoc (HsQualTy noExtField (noLoc ctxt) bdy))
+  let ib = noLoc (HsQualTy noExtField (noLoc ctxt) bdy)
   let instty = mkEmptyWildCardBndrs ib
   -- Create the deriving declaration for the lifted type constructor.
   return (Just (noLoc (DerivDecl noExtField instty Nothing Nothing)))
@@ -137,7 +137,7 @@ mkDerivingNF (old, new) | isVanillaAlgTyCon new = do
   let bdy = mkHsAppTy (mkHsAppTy clsty (foldr appVars newtyconty (reverse newvarsname)))
                                        (foldr appVars oldtyconty (reverse oldvarsname))
   let ty = noLoc (HsQualTy noExtField (noLoc ctxt) bdy)
-  let instty = mkEmptyWildCardBndrs $ HsIB (newvarsname ++ oldvarsname) ty
+  let instty = mkEmptyWildCardBndrs ty
   return (Just (noLoc (DerivDecl noExtField instty Nothing Nothing)))
   where
     alterVar v = do

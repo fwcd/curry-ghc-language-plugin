@@ -195,7 +195,7 @@ typeToLHsType = go
                           , hst_xforall = noExtField
                           , hst_body = go ty })
     go (AppTy t1 t2)        = nlHsAppTy (go t1) (go t2)
-    go ty = noLoc (XHsType (NHsCoreTy ty))
+    go ty = noLoc (XHsType ty)
 
    -- Source-language types have _invisible_ kind arguments,
    -- so we must remove them here (GHC Trac #8563)

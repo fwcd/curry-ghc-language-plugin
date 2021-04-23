@@ -324,7 +324,7 @@ liftLocalBinds given tcs (L l (HsValBinds x b)) = do
   return (L l (HsValBinds x b'), vs)
 liftLocalBinds _ _ b@(L l (HsIPBinds _ _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Implicit parameters are not supported by the plugin")
   failIfErrsM
   return (b, [])
@@ -488,7 +488,7 @@ liftMonadicExpr given tcs (L _ (ExplicitTuple _ args b)) =
   liftExplicitTuple given tcs args b
 liftMonadicExpr _    _   e@(L l ExplicitSum {}) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Unboxed sum types are not supported by the plugin")
   failIfErrsM
   return e
@@ -547,7 +547,7 @@ liftMonadicExpr given tcs (L _ (ExplicitList ty Nothing es)) = do
       foldrM mkCons nil es'
 liftMonadicExpr _ _ e@(L l (ExplicitList _ (Just _) _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return e
@@ -563,7 +563,7 @@ liftMonadicExpr given tcs
       else getTypeOrPanic e >>= flip (mkApp mkNewReturnTh) [e] -- ok
 liftMonadicExpr _ _ e@(L l (RecordCon (RecordConTc (PatSynCon _) _) _ _)) = do
     flags <- getDynFlags
-    reportError (mkErrMsg flags l neverQualify
+    reportError (mkMsgEnvelope flags l neverQualify
       "Pattern synonyms are not supported by the plugin")
     failIfErrsM
     return e
@@ -583,7 +583,7 @@ liftMonadicExpr given tcs (L _ (ArithSeq x Nothing i)) =
   liftMonadicExpr given tcs (foldl mkHsApp (noLoc x) (arithSeqArgs i))
 liftMonadicExpr _ _ e@(L l (ArithSeq _ (Just _) _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return e
@@ -591,25 +591,25 @@ liftMonadicExpr given tcs (L l (HsPragE x (HsPragSCC a b c) e)) =
   L l . HsPragE x (HsPragSCC a b c) <$> liftMonadicExpr given tcs e
 liftMonadicExpr _ _ e@(L l (HsBracket _ _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Template Haskell and Quotation are not supported by the plugin")
   failIfErrsM
   return e
 liftMonadicExpr _ _ e@(L l (HsSpliceE _ _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Template Haskell and Quotation are not supported by the plugin")
   failIfErrsM
   return e
 liftMonadicExpr _ _ e@(L l (HsTcBracketOut _ _ _ _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Template Haskell and Quotation are not supported by the plugin")
   failIfErrsM
   return e
 liftMonadicExpr _ _ e@(L l (HsProc _ _ _)) = do
   flags <- getDynFlags
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Arrow notation is not supported by the plugin")
   failIfErrsM
   return e
@@ -659,7 +659,7 @@ liftMonadicStmts ctxt ctxtSwitch ty given tcs (s:ss) = do
       return (L l (BindStmt (XBindStmtTc b' x' m f) p' e'), vs)
     liftMonadicStmt (L l (ApplicativeStmt _ _ _)) = do
       flags <- getDynFlags
-      reportError (mkErrMsg flags l neverQualify
+      reportError (mkMsgEnvelope flags l neverQualify
         "Applicative do-notation is not supported by the plugin")
       failIfErrsM
       return (s, [])
@@ -677,19 +677,19 @@ liftMonadicStmts ctxt ctxtSwitch ty given tcs (s:ss) = do
       return (L l (LetStmt x bs'), typeCorrected)
     liftMonadicStmt (L l (ParStmt _ _ _ _)) = do
       flags <- getDynFlags
-      reportError (mkErrMsg flags l neverQualify
+      reportError (mkMsgEnvelope flags l neverQualify
         "Parallel list comprehensions are not supported by the plugin")
       failIfErrsM
       return (s, [])
     liftMonadicStmt (L l (TransStmt _ _ _ _ _ _ _ _ _)) = do
       flags <- getDynFlags
-      reportError (mkErrMsg flags l neverQualify
+      reportError (mkMsgEnvelope flags l neverQualify
         "Transformative list comprehensions are not supported by the plugin")
       failIfErrsM
       return (s, [])
     liftMonadicStmt (L l (RecStmt _ _ _ _ _ _ _)) =  do
       flags <- getDynFlags
-      reportError (mkErrMsg flags l neverQualify
+      reportError (mkMsgEnvelope flags l neverQualify
         "Recursive do-notation is not supported by the plugin")
       failIfErrsM
       return (s, [])
@@ -923,7 +923,7 @@ liftMonadicRecordUpd tcs (RecordUpdTc cs intys outtys wrap) = do
     conLike (RealDataCon c) = RealDataCon <$> liftIO (getLiftedCon c tcs)
     conLike p@(PatSynCon _) = do
       flags <- getDynFlags
-      reportError (mkErrMsg flags noSrcSpan neverQualify
+      reportError (mkMsgEnvelope flags noSrcSpan neverQualify
         "Pattern synonyms are not supported by the plugin")
       failIfErrsM
       return p

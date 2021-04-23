@@ -71,7 +71,7 @@ liftPat' _ p@(ListPat (ListPatTc _ Nothing) _) =
 liftPat' _ p@(ListPat (ListPatTc _ (Just _)) _) = do
   flags <- getDynFlags
   l <- getSrcSpanM
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return (p, [])
@@ -86,7 +86,7 @@ liftPat' tcs (TuplePat tys args box) = do
 liftPat' _ p@SumPat {} = do
   flags <- getDynFlags
   l <- getSrcSpanM
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Unboxed sum types are not supported by the plugin")
   failIfErrsM
   return (p, [])
@@ -105,21 +105,21 @@ liftPat' tcs p@ConPat { pat_con_ext = x@ConPatTc { cpt_arg_tys = tys }
 liftPat' _ p@ConPat {} = do
   flags <- getDynFlags
   l <- getSrcSpanM
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Pattern synonyms are not supported by the plugin")
   failIfErrsM
   return (p, [])
 liftPat' _ p@(ViewPat _ _ _) = do
   flags <- getDynFlags
   l <- getSrcSpanM
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "View patterns are not supported by the plugin")
   failIfErrsM
   return (p, [])
 liftPat' _ p@(SplicePat _ _) = do
   flags <- getDynFlags
   l <- getSrcSpanM
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "Spliced patterns are not supported by the plugin")
   failIfErrsM
   return (p, [])
@@ -128,7 +128,7 @@ liftPat' _   p@NPat {}       = return (p, [])
 liftPat' _   p@(NPlusKPat _ _ _ _ _ _) = do
   flags <- getDynFlags
   l <- getSrcSpanM
-  reportError (mkErrMsg flags l neverQualify
+  reportError (mkMsgEnvelope flags l neverQualify
     "N+k patterns are not supported by the plugin")
   failIfErrsM
   return (p, [])

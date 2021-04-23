@@ -98,12 +98,12 @@ mkDerivingShare (_, tycon) | isVanillaAlgTyCon tycon = do
   let bdy = mkHsAppTy clsty (foldr appVars tyconty (reverse varsname))
   -- Include all Shareable contexts in the type and
   -- add the type variables to the set of bound variables.
-  let ib = HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = varsname }
-                 , sig_ext = noExtField
-                 , sig_body = noLocA (HsQualTy noExtField (Just (noLocA ctxt)) bdy) }
+  let ib = noLocA $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = varsname }
+                          , sig_ext = noExtField
+                          , sig_body = noLocA (HsQualTy noExtField (Just (noLocA ctxt)) bdy) }
   let instty = mkEmptyWildCardBndrs ib
   -- Create the deriving declaration for the lifted type constructor.
-  return (Just (noLoc (DerivDecl noExtField instty Nothing Nothing)))
+  return (Just (noLoc (DerivDecl noAnn instty Nothing Nothing)))
 mkDerivingShare _ = return Nothing
 
 -- | Create standalone deriving declaration for Normalform.
@@ -143,10 +143,10 @@ mkDerivingNF (old, new) | isVanillaAlgTyCon new = do
   let bdy = mkHsAppTy (mkHsAppTy clsty (foldr appVars newtyconty (reverse newvarsname)))
                                        (foldr appVars oldtyconty (reverse oldvarsname))
   let ty = noLocA (HsQualTy noExtField (Just (noLocA ctxt)) bdy)
-  let instty = mkEmptyWildCardBndrs $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = newvarsname ++ oldvarsname }
-                                            , sig_ext = noExtField
-                                            , sig_body = ty }
-  return (Just (noLoc (DerivDecl noExtField instty Nothing Nothing)))
+  let instty = mkEmptyWildCardBndrs $ noLocA $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = newvarsname ++ oldvarsname }
+                                                     , sig_ext = noExtField
+                                                     , sig_body = ty }
+  return (Just (noLoc (DerivDecl noAnn instty Nothing Nothing)))
   where
     alterVar v = do
       u <- getUniqueM
@@ -173,7 +173,7 @@ appVars n v = mkHsAppTy v (toTy n)
 
 -- | Create a type from a given type constructor name.
 toTy :: Name -> LHsType GhcRn
-toTy n = noLoc (HsTyVar noExtField NotPromoted (noLoc n))
+toTy n = noLocA (HsTyVar noAnn NotPromoted (noLocA n))
 
 -- | Convert a Type to a pre-typecheck LHsType.
 -- Mostly copied from GHC sources.
@@ -184,26 +184,26 @@ typeToLHsType = go
     go ty@(FunTy _ _  arg _)
       | isPredTy arg
       , (theta, tau) <- tcSplitPhiTy ty
-      = noLoc (HsQualTy { hst_ctxt = noLoc (map go theta)
+      = noLocA (HsQualTy { hst_ctxt = Just (noLocA (map go theta))
                         , hst_xqual = noExtField
                         , hst_body = go tau })
     go (FunTy _ _ arg res) = nlHsFunTy (go arg) (go res)
     go (ForAllTy (Bndr v vis) ty)
-      = noLoc (HsForAllTy { hst_tele = if isVisibleArgFlag vis
-                              then HsForAllVis   noExtField [go_tv1 v]
-                              else HsForAllInvis noExtField [go_tv2 v]
+      = noLocA (HsForAllTy { hst_tele = if isVisibleArgFlag vis
+                              then HsForAllVis   noAnn [go_tv1 v]
+                              else HsForAllInvis noAnn [go_tv2 v]
                           , hst_xforall = noExtField
                           , hst_body = go ty })
     go (AppTy t1 t2)        = nlHsAppTy (go t1) (go t2)
-    go ty = noLoc (XHsType ty)
+    go ty = noLocA (XHsType ty)
 
    -- Source-language types have _invisible_ kind arguments,
    -- so we must remove them here (GHC Trac #8563)
 
     go_tv1 :: TyVar -> LHsTyVarBndr () GhcRn
-    go_tv1 tv = noLoc $ KindedTyVar noExtField ()
-                                    (noLoc (varName tv)) (go (tyVarKind tv))
+    go_tv1 tv = noLocA $ KindedTyVar noAnn ()
+                                    (noLocA (varName tv)) (go (tyVarKind tv))
 
     go_tv2 :: TyVar -> LHsTyVarBndr Specificity GhcRn
-    go_tv2 tv = noLoc $ KindedTyVar noExtField SpecifiedSpec
-                                    (noLoc (varName tv)) (go (tyVarKind tv))
+    go_tv2 tv = noLocA $ KindedTyVar noAnn SpecifiedSpec
+                                    (noLocA (varName tv)) (go (tyVarKind tv))

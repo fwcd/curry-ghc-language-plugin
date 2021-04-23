@@ -16,6 +16,7 @@ import Data.Maybe
 import GHC.Plugins
 import GHC.Tc.Types
 import GHC.Core.Class
+import GHC.Core.Unify (RoughMatchTc (..))
 import GHC.Core.TyCo.Rep
 import GHC.Core.InstEnv
 
@@ -58,4 +59,4 @@ liftInstance tcs (ClsInst _ _ origDfn tvs origCls origTys origDf ov orp) = do
   let info' = setUnfoldingInfo (idInfo dfLifted) NoUnfolding
   let df = lazySetIdInfo dfLifted info'
 
-  return (ClsInst (className cls) tyn origDfn tvs cls tys df ov orp)
+  return (ClsInst (className cls) (maybe OtherTc KnownTc <$> tyn) origDfn tvs cls tys df ov orp)

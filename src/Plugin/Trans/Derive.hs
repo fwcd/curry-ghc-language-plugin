@@ -18,7 +18,7 @@ import GHC.Hs.Type
 import GHC.Hs.Decls
 import GHC.Hs.Utils
 import GHC.Types.Name.Occurrence hiding (varName)
-import GHC.Parser.Annotation (noLocA)
+import GHC.Parser.Annotation (noAnn, noLocA)
 import GHC.Plugins hiding (substTy, extendTvSubst)
 import GHC.Tc.Types
 import GHC.Tc.Utils.TcType
@@ -54,7 +54,7 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
                                                         , sig_ext = noExtField
                                                         , sig_body = newty }
   -- Create the deriving declaration for the lifted type constructor.
-  let newdecl = DerivDecl noExtField newinstty Nothing Nothing
+  let newdecl = DerivDecl noAnn newinstty Nothing Nothing
 
   -- Do the same for the old type constructor.
   let oldtyconty = toTy (tyConName old)
@@ -64,7 +64,7 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
   let oldinstty = mkEmptyWildCardBndrs $ noLocA $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = oldvars }
                                                         , sig_ext = noExtField
                                                         , sig_body = oldty }
-  let olddecl = DerivDecl noExtField oldinstty Nothing Nothing
+  let olddecl = DerivDecl noAnn oldinstty Nothing Nothing
 
   return [noLoc newdecl, noLoc olddecl]
 mkDerivingGen _ = return []

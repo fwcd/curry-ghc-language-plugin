@@ -930,18 +930,18 @@ liftMonadicRecordUpd tcs (RecordUpdTc cs intys outtys wrap) = do
 
 liftMonadicRecordUpdField :: [Ct] -> TyConMap -> LHsRecUpdField GhcTc
                           -> TcM (LHsRecUpdField GhcTc)
-liftMonadicRecordUpdField given tcs (L l1 (HsRecField (L l2 ambOcc) e pun)) = do
+liftMonadicRecordUpdField given tcs (L l1 (HsRecField ann (L l2 ambOcc) e pun)) = do
   ambOcc' <- liftAmbiguousFieldOcc tcs ambOcc
   e' <- liftMonadicExpr given tcs e
-  return (L l1 (HsRecField (L l2 ambOcc') e' pun))
+  return (L l1 (HsRecField ann (L l2 ambOcc') e' pun))
 
 liftMonadicRecField :: [Ct] -> TyConMap
                     -> LHsRecField GhcTc (LHsExpr GhcTc)
                     -> TcM (LHsRecField GhcTc (LHsExpr GhcTc))
-liftMonadicRecField given tcs (L l1 (HsRecField (L l2 occ) e pun)) = do
+liftMonadicRecField given tcs (L l1 (HsRecField ann (L l2 occ) e pun)) = do
   occ' <- liftFieldOcc tcs occ
   e' <- liftMonadicExpr given tcs e
-  return (L l1 (HsRecField (L l2 occ') e' pun))
+  return (L l1 (HsRecField ann (L l2 occ') e' pun))
 
 -- for some weird reason, the "v" is not a selector function.
 -- (It should be according to the doumentation)

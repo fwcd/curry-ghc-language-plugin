@@ -310,9 +310,9 @@ preprocessSynExpr _ NoSyntaxExprTc = return NoSyntaxExprTc
 
 preprocessField :: TyConMap -> Located (HsRecField' a (LHsExpr GhcTc))
                 -> TcM (Located (HsRecField' a (LHsExpr GhcTc)))
-preprocessField tcs (L l (HsRecField v e p)) = do
+preprocessField tcs (L l (HsRecField ann v e p)) = do
   e' <- preprocessExpr tcs e
-  return (L l (HsRecField v e' p))
+  return (L l (HsRecField ann v e' p))
 
 preprocessTupleArg :: TyConMap -> LHsTupArg GhcTc -> TcM (LHsTupArg GhcTc)
 preprocessTupleArg tcs (L l (Present x e)) =

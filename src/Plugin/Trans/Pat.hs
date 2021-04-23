@@ -14,6 +14,7 @@ module Plugin.Trans.Pat (liftPattern) where
 import GHC.Hs.Pat
 import GHC.Hs.Extension
 import GHC.Hs.Type
+import GHC.Parser.Annotation (noLocA)
 import GHC.Plugins hiding (substTy, extendTvSubst, getSrcSpanM)
 import GHC.Tc.Types
 import GHC.Tc.Types.Evidence
@@ -150,10 +151,10 @@ liftConDetail tcs _ (InfixCon arg1 arg2) = do
 
 liftRecFld :: TyConMap -> RecSelParent -> LHsRecField GhcTc (LPat GhcTc)
            -> TcM (LHsRecField GhcTc (LPat GhcTc), [(Var, Var)])
-liftRecFld tcs p (L l1 (HsRecField (L l2 idt) pat pn)) = do
+liftRecFld tcs p (L l1 (HsRecField ann (L l2 idt) pat pn)) = do
   idt' <- liftFieldOcc tcs p idt
   (p', vs) <- liftPat tcs pat
-  return (L l1 (HsRecField (L l2 idt') p' pn), vs)
+  return (L l1 (HsRecField ann (L l2 idt') p' pn), vs)
 
 liftFieldOcc :: TyConMap -> RecSelParent -> FieldOcc GhcTc
              -> TcM (FieldOcc GhcTc)
@@ -162,4 +163,4 @@ liftFieldOcc tcs p (FieldOcc v _) = do
   us <- getUniqueSupplyM
   stc <- getShareClassTycon
   v' <- liftIO (getLiftedRecSel stc mty us tcs p v)
-  return (FieldOcc v' (noLoc (nameRdrName (varName v'))))
+  return (FieldOcc v' (noLocA (nameRdrName (varName v'))))

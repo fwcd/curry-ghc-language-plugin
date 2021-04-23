@@ -336,8 +336,8 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
       (p2', vs2) <- prepareSelPat p2
       return (InfixCon p1' p2', vs1 ++ vs2)
 
-    prepareSelField (L l1 (HsRecField v p1 pun)) =
-      first (L l1 . flip (HsRecField v) pun) <$> prepareSelPat p1
+    prepareSelField (L l1 (HsRecField ann v p1 pun)) =
+      first (L l1 . flip (HsRecField ann v) pun) <$> prepareSelPat p1
 
     removeOtherPatterns :: Var -> LPat GhcTc -> LPat GhcTc
     removeOtherPatterns new p0@(L l1 p1) = L l1 $ case p1 of
@@ -380,8 +380,8 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
     removeOtherDetails new (InfixCon p1 p2) =
       InfixCon (removeOtherPatterns new p1) (removeOtherPatterns new p2)
 
-    removeOtherField new (L l1 (HsRecField v p1 pun)) =
-      L l1 (HsRecField v (removeOtherPatterns new p1) pun)
+    removeOtherField new (L l1 (HsRecField ann v p1 pun)) =
+      L l1 (HsRecField ann v (removeOtherPatterns new p1) pun)
 compileLetBind b@(L l (FunBind _ (L _ fname)
                (MG (MatchGroupTc args _) (L _ (L _ (Match _
                (FunRhs _ _ strict) _ _):_)) _) _)) = do
@@ -846,11 +846,11 @@ flattenConPatDetails (InfixCon a1 a2) tys _ = do
 
 flattenRecField :: [Type] -> LHsRecField GhcTc (LPat GhcTc)
                 -> TcM (LHsRecField GhcTc (LPat GhcTc), [Var], [LPat GhcTc])
-flattenRecField tys (L l (HsRecField idt p pn)) = do
+flattenRecField tys (L l (HsRecField ann idt p pn)) = do
   let ty = funResultTy (instantiateWith tys (varType (extFieldOcc (unLoc idt))))
   v <- mkVar ty
   let p' = noLoc (VarPat noExtField (noLoc v))
-  return (L l (HsRecField idt p' pn), [v], [p])
+  return (L l (HsRecField ann idt p' pn), [v], [p])
 
 mkVar :: Type -> TcM Var
 mkVar ty = do

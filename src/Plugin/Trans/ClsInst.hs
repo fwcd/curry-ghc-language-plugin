@@ -37,7 +37,7 @@ liftInstance tcs (ClsInst _ _ origDfn tvs origCls origTys origDf ov orp) = do
 
   -- Split the lifted type into invisible pi-types (forall, constraints) #
   -- and the rest.
-  (pis, inner) <- splitPiTysInvisible
+  (pis, inner) <- splitInvisPiTys
     <$> liftIO (replaceTyconTy tcs (varType origDf))
   -- Get named binders (e.g., foralls).
   let named = filter isNamedBinder pis

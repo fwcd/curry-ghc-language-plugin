@@ -18,6 +18,7 @@ import GHC.Hs.Type
 import GHC.Hs.Decls
 import GHC.Hs.Utils
 import GHC.Types.Name.Occurrence hiding (varName)
+import GHC.Parser.Annotation (noLocA)
 import GHC.Plugins hiding (substTy, extendTvSubst)
 import GHC.Tc.Types
 import GHC.Tc.Utils.TcType
@@ -49,8 +50,9 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
   -- Apply the class to the fully saturated lifted type constructor.
   let newbdy = mkHsAppTy clsty (foldr appVars newtyconty (reverse newvars))
   let newty = newbdy
-  -- Add the type variables to the set of bound variables.
-  let newinstty = mkEmptyWildCardBndrs newty
+  let newinstty = mkEmptyWildCardBndrs $ noLocA $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = newvars }
+                                                        , sig_ext = noExtField
+                                                        , sig_body = newty }
   -- Create the deriving declaration for the lifted type constructor.
   let newdecl = DerivDecl noExtField newinstty Nothing Nothing
 
@@ -59,7 +61,9 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
   let oldvars = map varName $ tyConTyVars old
   let oldbdy = mkHsAppTy clsty (foldr appVars oldtyconty oldvars)
   let oldty = oldbdy
-  let oldinstty = mkEmptyWildCardBndrs oldty
+  let oldinstty = mkEmptyWildCardBndrs $ noLocA $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = oldvars }
+                                                        , sig_ext = noExtField
+                                                        , sig_body = oldty }
   let olddecl = DerivDecl noExtField oldinstty Nothing Nothing
 
   return [noLoc newdecl, noLoc olddecl]
@@ -94,7 +98,9 @@ mkDerivingShare (_, tycon) | isVanillaAlgTyCon tycon = do
   let bdy = mkHsAppTy clsty (foldr appVars tyconty (reverse varsname))
   -- Include all Shareable contexts in the type and
   -- add the type variables to the set of bound variables.
-  let ib = noLoc (HsQualTy noExtField (noLoc ctxt) bdy)
+  let ib = HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = varsname }
+                 , sig_ext = noExtField
+                 , sig_body = noLocA (HsQualTy noExtField (Just (noLocA ctxt)) bdy) }
   let instty = mkEmptyWildCardBndrs ib
   -- Create the deriving declaration for the lifted type constructor.
   return (Just (noLoc (DerivDecl noExtField instty Nothing Nothing)))
@@ -136,8 +142,10 @@ mkDerivingNF (old, new) | isVanillaAlgTyCon new = do
   let clsty = mkHsAppTy nfcty mty
   let bdy = mkHsAppTy (mkHsAppTy clsty (foldr appVars newtyconty (reverse newvarsname)))
                                        (foldr appVars oldtyconty (reverse oldvarsname))
-  let ty = noLoc (HsQualTy noExtField (noLoc ctxt) bdy)
-  let instty = mkEmptyWildCardBndrs ty
+  let ty = noLocA (HsQualTy noExtField (Just (noLocA ctxt)) bdy)
+  let instty = mkEmptyWildCardBndrs $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = newvarsname ++ oldvarsname }
+                                            , sig_ext = noExtField
+                                            , sig_body = ty }
   return (Just (noLoc (DerivDecl noExtField instty Nothing Nothing)))
   where
     alterVar v = do

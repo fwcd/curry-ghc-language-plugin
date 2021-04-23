@@ -81,7 +81,7 @@ liftTycon dynFlags instEnvs stycon mtycon supply tcs tcsM tc
              | otherwise       = liftName (tyConName tc) u
         tycon = mkSynonymTyCon
           name (tyConBinders tc) (tyConResKind tc)
-          (tyConRoles tc) ty (isTauTyCon tc) (isFamFreeTyCon tc)
+          (tyConRoles tc) ty (isTauTyCon tc) (isFamFreeTyCon tc) (isForgetfulSynTyCon tc)
     return (supply1, (tc, Just tycon))
   | otherwise = return (supply, (tc, Nothing))
 

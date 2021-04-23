@@ -66,7 +66,7 @@ mkDerivingGen (old, new) | isVanillaAlgTyCon new = do
                                                         , sig_body = oldty }
   let olddecl = DerivDecl noAnn oldinstty Nothing Nothing
 
-  return [noLoc newdecl, noLoc olddecl]
+  return $ noLocA <$> [newdecl, olddecl]
 mkDerivingGen _ = return []
 
 -- | Create standalone deriving declaration for Shareable.
@@ -103,7 +103,7 @@ mkDerivingShare (_, tycon) | isVanillaAlgTyCon tycon = do
                           , sig_body = noLocA (HsQualTy noExtField (Just (noLocA ctxt)) bdy) }
   let instty = mkEmptyWildCardBndrs ib
   -- Create the deriving declaration for the lifted type constructor.
-  return (Just (noLoc (DerivDecl noAnn instty Nothing Nothing)))
+  return (Just (noLocA (DerivDecl noAnn instty Nothing Nothing)))
 mkDerivingShare _ = return Nothing
 
 -- | Create standalone deriving declaration for Normalform.
@@ -146,7 +146,7 @@ mkDerivingNF (old, new) | isVanillaAlgTyCon new = do
   let instty = mkEmptyWildCardBndrs $ noLocA $ HsSig { sig_bndrs = HsOuterImplicit { hso_ximplicit = newvarsname ++ oldvarsname }
                                                      , sig_ext = noExtField
                                                      , sig_body = ty }
-  return (Just (noLoc (DerivDecl noAnn instty Nothing Nothing)))
+  return (Just (noLocA (DerivDecl noAnn instty Nothing Nothing)))
   where
     alterVar v = do
       u <- getUniqueM

@@ -11,6 +11,8 @@ variables that might need to be shared.
 -}
 module Plugin.Trans.Pat (liftPattern) where
 
+import Control.Monad (unless)
+
 import GHC.Hs.Pat
 import GHC.Hs.Extension
 import GHC.Hs.Type
@@ -138,9 +140,9 @@ liftPat' tcs (XPat (CoPat _ p _)) = liftPat' tcs p
 
 liftConDetail :: TyConMap -> RecSelParent -> HsConPatDetails GhcTc
               -> TcM (HsConPatDetails GhcTc, [(Var, Var)])
-liftConDetail tcs _ (PrefixCon args) = do
+liftConDetail tcs _ (PrefixCon _ args) = do
   (args', vs) <- unzip <$> mapM (liftPat tcs) args
-  return (PrefixCon args', concat vs)
+  return (PrefixCon [] args', concat vs)
 liftConDetail tcs p (RecCon (HsRecFields flds d)) = do
   (flds', vs) <- unzip <$> mapM (liftRecFld tcs p) flds
   return (RecCon (HsRecFields flds' d), concat vs)

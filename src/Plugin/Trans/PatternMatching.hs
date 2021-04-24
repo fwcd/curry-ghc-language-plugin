@@ -325,9 +325,9 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
                                 return (XPat (CoPat a p3 c), vs)
       p2              -> return (p2, [])
 
-    prepareSelDetails (PrefixCon ps) = do
+    prepareSelDetails (PrefixCon _ ps) = do
       (ps', vss) <- unzip <$> mapM prepareSelPat ps
-      return (PrefixCon ps', concat vss)
+      return (PrefixCon [] ps', concat vss)
     prepareSelDetails (RecCon (HsRecFields flds dd)) = do
       (flds', vss) <- unzip <$> mapM prepareSelField flds
       return (RecCon (HsRecFields flds' dd), concat vss)
@@ -373,8 +373,8 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
                                  (unLoc (removeOtherPatterns new (noLoc p2))) c)
       _                     -> WildPat (hsLPatType p0)
 
-    removeOtherDetails new (PrefixCon ps) =
-      PrefixCon (map (removeOtherPatterns new) ps)
+    removeOtherDetails new (PrefixCon tyargs ps) =
+      PrefixCon tyargs (map (removeOtherPatterns new) ps)
     removeOtherDetails new (RecCon (HsRecFields flds dd)) =
       RecCon (HsRecFields (map (removeOtherField new) flds) dd)
     removeOtherDetails new (InfixCon p1 p2) =
@@ -792,14 +792,14 @@ flattenPat p@(L l (ListPat (ListPatTc _ (Just _)) _ )) = do
 flattenPat (L l (ListPat (ListPatTc ty Nothing) [] )) = do
   let dc = noLoc (RealDataCon nilDataCon)
   let res = L l (ConPat (ConPatTc [ty] [] [] (EvBinds emptyBag) WpHole)
-                   dc (PrefixCon []))
+                   dc (PrefixCon [] []))
   return (res, [], [])
 flattenPat (L l (ListPat tc@(ListPatTc ty Nothing) (x:xs))) = do
   v1 <- mkVar ty
   v2 <- mkVar (mkTyConApp listTyCon [ty])
   let dc = noLoc (RealDataCon consDataCon)
-  let c  = PrefixCon [ noLoc (VarPat noExtField (noLoc v1))
-                     , noLoc (VarPat noExtField (noLoc v2))]
+  let c  = PrefixCon [] [ noLoc (VarPat noExtField (noLoc v1))
+                        , noLoc (VarPat noExtField (noLoc v2))]
   let res = L l (ConPat (ConPatTc [ty] [] [] (EvBinds emptyBag) WpHole) dc c)
   return (res, [v1, v2], [x, noLoc (ListPat tc xs)])
 flattenPat (L l (TuplePat tys ps b)) =
@@ -833,9 +833,9 @@ flattenPat (L l (XPat (CoPat co p w))) =
 
 flattenConPatDetails :: HsConPatDetails GhcTc -> [Scaled Type] -> [Type]
                      -> TcM (HsConPatDetails GhcTc, [Var], [LPat GhcTc])
-flattenConPatDetails (PrefixCon args) tys _ = do
+flattenConPatDetails (PrefixCon tyargs args) tys _ = do
   vs <- mapM (\(Scaled _ ty) -> mkVar ty) tys
-  return (PrefixCon (map (noLoc . VarPat noExtField . noLoc ) vs), vs, args)
+  return (PrefixCon tyargs (map (noLoc . VarPat noExtField . noLoc ) vs), vs, args)
 flattenConPatDetails (RecCon (HsRecFields flds d)) _ tys = do
   (flds', vs, args) <- unzip3 <$> mapM (flattenRecField tys) flds
   return (RecCon (HsRecFields flds' d), concat vs, concat args)

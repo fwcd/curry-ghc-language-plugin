@@ -174,8 +174,7 @@ compileDo ty ctxt (L _ (LetStmt _ bs) : xs) = do
       let lastS = noLoc (LastStmt noExtField e Nothing NoSyntaxExprTc)
       return (lets ++ [lastS], swapCtxt)
 compileDo _ _ (L l (ApplicativeStmt _ _ _) : _) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Applicative do-notation is not supported by the plugin")
   failIfErrsM
   return ([], False)
@@ -189,20 +188,17 @@ compileDo ty ctxt (L l (BodyStmt x e@(L el ee) s g) : xs) = do
     _        -> return (s, g, e)
   return (L l (BodyStmt x e' s' g'):xs', swapCtxt)
 compileDo _ _ (L l (ParStmt _ _ _ _) : _) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Parallel list comprehensions are not supported by the plugin")
   failIfErrsM
   return ([], False)
 compileDo _ _ (L l (TransStmt _ _ _ _ _ _ _ _ _) : _) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Transformative list comprehensions are not supported by the plugin")
   failIfErrsM
   return ([], False)
 compileDo _ _ (L l (RecStmt _ _ _ _ _ _ _) : _) =  do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Recursive do-notation is not supported by the plugin")
   failIfErrsM
   return ([], False)
@@ -224,8 +220,7 @@ compileLet (L _ (HsValBinds _ (XValBindsLR (NValBinds bs _)))) = do
       (bss, vss) <- unzip <$> mapM compileLetBind (bagToList bs')
       return ((f, listToBag (concat bss)), concat vss)
 compileLet (L l (HsIPBinds _ _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Implicit parameters are not supported by the plugin")
   failIfErrsM
   return ([], [])
@@ -578,8 +573,7 @@ mkOtherMatch :: Int -> [Var] -> Type -> LHsExpr GhcTc
 mkOtherMatch _ _ _ _ [] =
   panicAny "Unexpected empty list of rules" ()
 mkOtherMatch _ _ _ e ((L l _, _):_) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Pattern match extensions are not supported by the plugin")
   failIfErrsM
   return e
@@ -784,8 +778,7 @@ flattenPat (L l (ParPat x p   )) =
 flattenPat (L l (BangPat x p  )) =
    (\(a,b,c) -> (L l (BangPat x a), b, c)) <$> flattenPat p
 flattenPat p@(L l (ListPat (ListPatTc _ (Just _)) _ )) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return (p, [], [])
@@ -817,8 +810,7 @@ flattenPat (L _ (ViewPat _ _ p')) = flattenPat p'
   -- seems weird, cut the matching on the view is handled somewhere else.
   -- We are only interested in what is left to match on the inner patttern
 flattenPat p@(L l (SplicePat _ _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Template Haskell is not supported by the plugin")
   failIfErrsM
   return (p, [], [])

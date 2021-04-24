@@ -131,8 +131,7 @@ preprocessExpr tcs (L l (ExplicitTuple x args b)) = do
   args' <- mapM (preprocessTupleArg tcs) args
   return (L l (ExplicitTuple x args' b))
 preprocessExpr _ e@(L l ExplicitSum {}) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Unboxed sum types are not supported by the plugin")
   failIfErrsM
   return e
@@ -158,8 +157,7 @@ preprocessExpr tcs (L l (ExplicitList x Nothing es)) = do
   es' <- mapM (preprocessExpr tcs) es
   return (L l (ExplicitList x Nothing es'))
 preprocessExpr _ e@(L l (ExplicitList _ (Just _) _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return e
@@ -178,8 +176,7 @@ preprocessExpr tcs (L l (ArithSeq x Nothing i)) = do
   i' <- preprocessArithExpr tcs i
   return (L l (ArithSeq x' Nothing i'))
 preprocessExpr _ e@(L l (ArithSeq _ (Just _) _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return e
@@ -187,26 +184,22 @@ preprocessExpr tcs (L l (HsPragE x (HsPragSCC a b c) e)) = do
   e' <- preprocessExpr tcs e
   return (L l (HsPragE x (HsPragSCC a b c) e'))
 preprocessExpr _ e@(L l (HsBracket _ _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Template Haskell and Quotation are not supported by the plugin")
   failIfErrsM
   return e
 preprocessExpr _ e@(L l (HsSpliceE _ _)) =  do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Template Haskell and Quotation are not supported by the plugin")
   failIfErrsM
   return e
 preprocessExpr _ e@(L l (HsTcBracketOut _ _ _ _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Template Haskell and Quotation are not supported by the plugin")
   failIfErrsM
   return e
 preprocessExpr _ e@(L l (HsProc _ _ _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Arrow notation is not supported by the plugin")
   failIfErrsM
   return e
@@ -228,8 +221,7 @@ preprocessExpr _ (L _ (HsUnboundVar _ _)) = undefined
 preprocessExpr _ (L _ (HsRecFld _ _)) = undefined
 preprocessExpr _ (L _ (HsOverLabel _ _)) = undefined
 preprocessExpr _ e@(L l (HsIPVar _ _)) = do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Implicit parameters are not supported by the plugin")
   failIfErrsM
   return e
@@ -270,8 +262,7 @@ preprocessStmts tcs (s:ss) = do
       f'  <- maybe (return Nothing) (fmap Just . preprocessSynExpr tcs) f
       return (L l (BindStmt (XBindStmtTc b' m ty f') p e'))
     preprocessStmt (L l (ApplicativeStmt _ _ _)) = do
-      flags <- getDynFlags
-      reportError (mkMsgEnvelope flags l neverQualify
+      reportError (mkMsgEnvelope l neverQualify
         "Applicative do-notation is not supported by the plugin")
       failIfErrsM
       return s
@@ -284,20 +275,17 @@ preprocessStmts tcs (s:ss) = do
       bs' <- preprocessLocalBinds tcs bs
       return (L l (LetStmt x bs'))
     preprocessStmt (L l (ParStmt _ _ _ _)) =  do
-      flags <- getDynFlags
-      reportError (mkMsgEnvelope flags l neverQualify
+      reportError (mkMsgEnvelope l neverQualify
         "Parallel list comprehensions are not supported by the plugin")
       failIfErrsM
       return s
     preprocessStmt (L l (TransStmt _ _ _ _ _ _ _ _ _)) = do
-      flags <- getDynFlags
-      reportError (mkMsgEnvelope flags l neverQualify
+      reportError (mkMsgEnvelope l neverQualify
         "Transformative list comprehensions are not supported by the plugin")
       failIfErrsM
       return s
     preprocessStmt (L l (RecStmt _ _ _ _ _ _ _)) =  do
-      flags <- getDynFlags
-      reportError (mkMsgEnvelope flags l neverQualify
+      reportError (mkMsgEnvelope l neverQualify
         "Recursive do-notation is not supported by the plugin")
       failIfErrsM
       return s
@@ -325,8 +313,7 @@ preprocessLocalBinds tcs (L l (HsValBinds x b)) = do
   b' <- preprocessValBinds tcs b
   return (L l (HsValBinds x b'))
 preprocessLocalBinds _ bs@(L l (HsIPBinds _ _)) =  do
-  flags <- getDynFlags
-  reportError (mkMsgEnvelope flags l neverQualify
+  reportError (mkMsgEnvelope l neverQualify
     "Implicit parameters are not supported by the plugin")
   failIfErrsM
   return bs

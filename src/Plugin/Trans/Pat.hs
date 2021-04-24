@@ -16,7 +16,7 @@ import Control.Monad (unless)
 import GHC.Hs.Pat
 import GHC.Hs.Extension
 import GHC.Hs.Type
-import GHC.Parser.Annotation (noLocA)
+import GHC.Parser.Annotation (locA, noLocA)
 import GHC.Plugins hiding (substTy, extendTvSubst, getSrcSpanM)
 import GHC.Tc.Types
 import GHC.Tc.Types.Evidence
@@ -38,7 +38,7 @@ liftPattern = liftPat
 liftPat :: TyConMap -> LPat GhcTc
         -> TcM (LPat GhcTc, [(Var, Var)])
 liftPat tcs (L l p) = do
-  (r, vs1) <- setSrcSpan l $ liftPat' tcs p
+  (r, vs1) <- setSrcSpan (locA l) $ liftPat' tcs p
   return (L l r, vs1)
 
 liftPat' :: TyConMap -> Pat GhcTc
@@ -79,9 +79,9 @@ liftPat' _ p@(ListPat (ListPatTc _ (Just _)) _) = do
   return (p, [])
 liftPat' tcs (TuplePat tys args box) = do
   con <- liftIO (getLiftedCon (tupleDataCon box (length tys)) tcs)
-  let lc = noLoc (RealDataCon con)
+  let lc = noLocA (RealDataCon con)
   (args', vs) <- unzip <$> mapM (liftPat tcs) args
-  let det = PrefixCon args'
+  let det = PrefixCon [] args'
   tys' <- mapM (liftInnerTyTcM tcs) tys
   let res = ConPat (ConPatTc tys' [] [] (EvBinds emptyBag) WpHole) lc det
   return (res, concat vs)

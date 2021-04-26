@@ -90,7 +90,7 @@ liftMonadicBinding lcl _ given tcs _ (FunBind wrap (L b name) eqs ticks) =
   let name' = setVarType name ty
   let wrapLike = createWrapperLike ty tvs allEvs
 
-  let (_, monotype) = splitPiTysInvisibleN (length tvs + length c)
+  let (_, monotype) = splitInvisPiTysN (length tvs + length c)
                         (instantiateWith (map mkTyVarTy tvs) ty)
   (eqs', con) <- captureConstraints $ if isDerivedEnum eqs
     then liftDerivedEnumEquation tcs eqs
@@ -178,13 +178,13 @@ liftMonadicBinding lcl _ given tcs _ (AbsBinds a b c d e f g)
       -- Then we can do the lifting and stuff.
       -- All of this is only done, when a lifting is even required.
       let v1ty = varType v1
-      ty1 <- case splitTyConApp_maybe (snd (splitPiTysInvisible v1ty)) of
+      ty1 <- case splitTyConApp_maybe (snd (splitInvisPiTys v1ty)) of
         Just (tc, _) | tc == mtycon
           -> do
           (unlifted, _) <- liftIO (removeNondetShareable tcs mtycon stycon v1ty)
           liftTypeTcM tcs unlifted
         _ -> do
-          let (bs1, t1) = splitPiTysInvisibleN (length b + length c) v1ty
+          let (bs1, t1) = splitInvisPiTysN (length b + length c) v1ty
               named = filter isNamedBinder bs1
           uss <- replicateM (length named) getUniqueSupplyM
           let bs = map (\(Named b') -> b') named
@@ -275,11 +275,11 @@ liftMonadicBinding _ _ _ tcs _ (VarBind x1 name e1)
     -- But only if the type is not lifted already.
     let numBinders = length (fst (collectHsWrapBinders wrap))
     let ty = varType name
-    (ty', bndrs) <- case splitTyConApp_maybe (snd (splitPiTysInvisible ty)) of
+    (ty', bndrs) <- case splitTyConApp_maybe (snd (splitInvisPiTys ty)) of
       Just (tc, _) | tc == mtycon
         -> (,[]) <$> liftIO (replaceTyconTy tcs ty)
       _ -> do
-        let (bs1, ty1) = splitPiTysInvisibleN numBinders ty
+        let (bs1, ty1) = splitInvisPiTysN numBinders ty
             named = filter isNamedBinder bs1
         uss <- replicateM (length named) getUniqueSupplyM
         let bs = map (\(Named b') -> b') named
@@ -814,7 +814,7 @@ liftVarWithWrapper given tcs w v
         | all (\cv -> countVarOcc cv t == 0) absts
                 = Just t
       getPred _ = Nothing
-      preds = mapMaybe getPred (fst (splitPiTysInvisible monotype))
+      preds = mapMaybe getPred (fst (splitInvisPiTys monotype))
 
   let isWpHole WpHole = True
       isWpHole _      = False

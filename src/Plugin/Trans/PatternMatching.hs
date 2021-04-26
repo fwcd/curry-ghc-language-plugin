@@ -22,7 +22,9 @@ import Data.Maybe
 import Data.Tuple.Extra
 import Control.Monad
 import Language.Haskell.TH (Extension(..))
+import Language.Haskell.Syntax (noExtField, NoGhcTc)
 
+import GHC.Parser.Annotation (noLocA, noAnn, SrcSpanAnn' (..))
 import GHC.Plugins
 import GHC.Hs.Binds
 import GHC.Hs.Extension
@@ -79,8 +81,8 @@ matchExpr :: HsExpr GhcTc -> TcM (HsExpr GhcTc)
 matchExpr (HsLam x mg) = compileMatchGroup mg >>= \case
   Left mg' -> return (HsLam x mg')
   Right e  -> return (unLoc e)
-matchExpr (HsLamCase x mg) = compileMatchGroup mg >>= \case
-  Left mg' -> return (HsLam x mg')
+matchExpr (HsLamCase _ mg) = compileMatchGroup mg >>= \case
+  Left mg' -> return (HsLam noExtField mg')
   Right e  -> return (unLoc e)
 matchExpr (HsCase _ (L _ (HsVar _ (L _ v)))
   (MG (MatchGroupTc _ res) (L _ alts) _)) = do
@@ -95,7 +97,7 @@ matchExpr (HsMultiIf ty grhs) = do
   err <- errorExpr IfAlt ty
   unLoc <$> foldM compileGuard err grhs
 matchExpr (HsLet _ bs e) = do
-  (bs', vss) <- compileLet bs
+  (bs', vss) <- compileLet noSrcSpan bs
   strict <- foldrM mkSeq e (reverse $ map unLoc $ sortBy cmpLocated vss)
   let eLet = foldr toLetExpr strict bs'
   return (unLoc eLet)
@@ -119,7 +121,7 @@ compileDo ty ctxt [L l (LastStmt x e b r)] = do
   (r', e', ctxtSwap) <- case ctxt of
     ListComp -> do
       lr <- mkListReturn ty'
-      return (NoSyntaxExprTc, noLoc (applySynExpr lr (unLoc e)), True)
+      return (NoSyntaxExprTc, noLocA (applySynExpr lr (unLoc e)), True)
     _        -> return (r, e, False)
   return ([L l (LastStmt x e' b r')], ctxtSwap)
 compileDo _ _ (s@(L _ (LastStmt _ _ _ _)) : _) =
@@ -128,7 +130,7 @@ compileDo ty ctxt (L l (BindStmt (XBindStmtTc b' _ _ f') p e) : stmts) = do
   -- Compile the rest of the statements and create a do-expression.
   (stmts', swapCtxt) <- compileDo ty ctxt stmts
   let ctxt' = if swapCtxt then DoExpr Nothing else ctxt
-  let rest = noLoc (HsDo ty ctxt' (noLoc stmts'))
+  let rest = noLocA (HsDo ty ctxt' (noLocA stmts'))
 
   emty <- getTypeOrPanic e -- ok
   let ety = snd (splitAppTy emty)
@@ -141,39 +143,39 @@ compileDo ty ctxt (L l (BindStmt (XBindStmtTc b' _ _ f') p e) : stmts) = do
 
   -- Create the regular and fail alternatatives
   -- (if f is not noSynExpr, the fail one never gets used).
-  v <- noLoc <$> freshVar (Scaled Many ety)
+  v <- noLocA <$> freshVar (Scaled Many ety)
   let alt = mkSimpleAlt CaseAlt rest [p]
       fe = mkHsWrap (syn_res_wrap f)
-        (HsApp noExtField (noLoc (syn_expr f))
+        (HsApp noAnn (noLocA (syn_expr f))
           (fmap (mkHsWrap (head (syn_arg_wraps f)))
             (errorStrStmt ctxt)))
-      altFail = mkSimpleAlt CaseAlt (noLoc fe) [noLoc (WildPat ety)]
+      altFail = mkSimpleAlt CaseAlt (noLocA fe) [noLocA (WildPat ety)]
       alts = case f of
-               NoSyntaxExprTc -> [noLoc alt]
-               _              -> [noLoc alt, noLoc altFail]
+               NoSyntaxExprTc -> [noLocA alt]
+               _              -> [noLocA alt, noLocA altFail]
       mgtc = MatchGroupTc [Scaled Many ety] ty
-      mg = MG mgtc (noLoc alts) Generated
-  e' <- matchExpr (HsCase noExtField (noLoc (HsVar noExtField v)) mg)
+      mg = MG mgtc (noLocA alts) Generated
+  e' <- matchExpr (HsCase noExtField (noLocA (HsVar noExtField v)) mg)
   return ([L l (BindStmt (XBindStmtTc b ty Many Nothing)
-                 (noLoc (VarPat noExtField v)) e),
-          noLoc (LastStmt noExtField (noLoc e') Nothing NoSyntaxExprTc)],
+                 (noLocA (VarPat noExtField v)) e),
+          noLocA (LastStmt noExtField (noLocA e') Nothing NoSyntaxExprTc)],
           -- Normally ListCompr creates a return around LastStmt.
           -- Prevent creation of duplicate return for MonadCompr
           -- due to nested LastStmt by changing the context.
           case ctxt of { ListComp -> True; _ -> False })
-compileDo ty ctxt (L _ (LetStmt _ bs) : xs) = do
-  (bs', vss) <- compileLet bs
+compileDo ty ctxt (L (SrcSpanAnn _ l) (LetStmt _ bs) : xs) = do
+  (bs', vss) <- compileLet l bs
   let lets = map toLetStmt bs'
   (xs', swapCtxt) <- compileDo ty ctxt xs
   if null vss
     then return (lets ++ xs', swapCtxt)
     else do
       let ctxt' = if swapCtxt then DoExpr Nothing else ctxt
-      let rest = noLoc (HsDo ty ctxt' (noLoc xs'))
+      let rest = noLocA (HsDo ty ctxt' (noLocA xs'))
       e <- foldrM mkSeq rest (reverse $ map unLoc $ sortBy cmpLocated vss)
-      let lastS = noLoc (LastStmt noExtField e Nothing NoSyntaxExprTc)
+      let lastS = noLocA (LastStmt noExtField e Nothing NoSyntaxExprTc)
       return (lets ++ [lastS], swapCtxt)
-compileDo _ _ (L l (ApplicativeStmt _ _ _) : _) = do
+compileDo _ _ (L (SrcSpanAnn _ l) (ApplicativeStmt _ _ _) : _) = do
   reportError (mkMsgEnvelope l neverQualify
     "Applicative do-notation is not supported by the plugin")
   failIfErrsM
@@ -187,17 +189,17 @@ compileDo ty ctxt (L l (BodyStmt x e@(L el ee) s g) : xs) = do
                                    <*> fmap (L el . (`applySynExpr` ee)) mkListGuard
     _        -> return (s, g, e)
   return (L l (BodyStmt x e' s' g'):xs', swapCtxt)
-compileDo _ _ (L l (ParStmt _ _ _ _) : _) = do
+compileDo _ _ (L (SrcSpanAnn _ l) (ParStmt _ _ _ _) : _) = do
   reportError (mkMsgEnvelope l neverQualify
     "Parallel list comprehensions are not supported by the plugin")
   failIfErrsM
   return ([], False)
-compileDo _ _ (L l (TransStmt _ _ _ _ _ _ _ _ _) : _) = do
+compileDo _ _ (L (SrcSpanAnn _ l) (TransStmt _ _ _ _ _ _ _ _ _) : _) = do
   reportError (mkMsgEnvelope l neverQualify
     "Transformative list comprehensions are not supported by the plugin")
   failIfErrsM
   return ([], False)
-compileDo _ _ (L l (RecStmt _ _ _ _ _ _ _) : _) =  do
+compileDo _ _ (L (SrcSpanAnn _ l) (RecStmt _ _ _ _ _ _ _) : _) =  do
   reportError (mkMsgEnvelope l neverQualify
     "Recursive do-notation is not supported by the plugin")
   failIfErrsM
@@ -205,26 +207,26 @@ compileDo _ _ (L l (RecStmt _ _ _ _ _ _ _) : _) =  do
 
 applySynExpr :: SyntaxExpr GhcTc -> HsExpr GhcTc -> HsExpr GhcTc
 applySynExpr NoSyntaxExprTc ex = ex
-applySynExpr (SyntaxExprTc se _ _) ex = HsApp noExtField
-  (noLoc (HsPar noExtField (noLoc se)))
-  (noLoc (HsPar noExtField (noLoc ex)))
+applySynExpr (SyntaxExprTc se _ _) ex = HsApp noAnn
+  (noLocA (HsPar noAnn (noLocA se)))
+  (noLocA (HsPar noAnn (noLocA ex)))
 
 -- | Desugars pattern bindings in the given let-bindings.
 -- This is done by introducing selector functions for each of them.
-compileLet :: LHsLocalBinds GhcTc -> TcM ([(RecFlag, LHsBinds GhcTc)], [Located Var])
-compileLet (L _ (HsValBinds _ (XValBindsLR (NValBinds bs _)))) = do
+compileLet :: SrcSpan -> HsLocalBinds GhcTc -> TcM ([(RecFlag, LHsBinds GhcTc)], [Located Var])
+compileLet _ (HsValBinds _ (XValBindsLR (NValBinds bs _))) = do
   (bs', vss) <- unzip <$> mapM compileValBs bs
   return (bs', concat vss)
   where
     compileValBs (f, bs') = do
       (bss, vss) <- unzip <$> mapM compileLetBind (bagToList bs')
       return ((f, listToBag (concat bss)), concat vss)
-compileLet (L l (HsIPBinds _ _)) = do
+compileLet l (HsIPBinds _ _) = do
   reportError (mkMsgEnvelope l neverQualify
     "Implicit parameters are not supported by the plugin")
   failIfErrsM
   return ([], [])
-compileLet _ = return ([], [])
+compileLet _ _ = return ([], [])
 
 -- | Desugars pattern bindings in the given let-binding.
 -- This is done by introducing (multiple) selector functions
@@ -246,14 +248,14 @@ compileLetBind (L l (AbsBinds x tvs evs ex ev bs sig)) = do
       | v == m             = return (L l' p, Nothing)
     getRealVar (_ : ex') v = getRealVar ex' v
 
-compileLetBind (L l (PatBind ty p grhss _)) = do
+compileLetBind (L (SrcSpanAnn _ l) (PatBind ty p grhss _)) = do
   mtc <- getMonadTycon
   -- we do not use ConstraintSolver.removeNondet,
   -- as TyConMap is not available and not required
   let ty' = everywhere (mkT (rmNondet mtc)) ty
   (b, fname) <- createOrdinaryFun ty'
   (p', vs) <- prepareSelPat p
-  let pe = noLoc (HsVar noExtField (noLoc fname))
+  let pe = noLocA (HsVar noExtField (noLocA fname))
   bs <- mapM (mkSelFun ty' p' pe) vs
   flags <- getDynFlags
   let decidedStrict = isBangPat p ||
@@ -269,30 +271,30 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
     -- fname = grhss
     createOrdinaryFun ty' = do
       fname <- freshVar (Scaled Many ty')
-      let ctxt = FunRhs (noLoc (varName fname)) Prefix origStrictness
-          alt = Match noExtField ctxt [] grhss
+      let ctxt = FunRhs (noLocA (varName fname)) Prefix origStrictness
+          alt = Match noAnn ctxt [] grhss
           mgtc = MatchGroupTc [] ty'
-          mg = MG mgtc (noLoc [noLoc alt]) Generated
-      return (noLoc (FunBind WpHole (noLoc fname) mg []), fname)
+          mg = MG mgtc (noLocA [noLocA alt]) Generated
+      return (noLocA (FunBind WpHole (noLocA fname) mg []), fname)
     -- create:
     -- old = (\p' -> new) pe
     mkSelFun ty' p' pe (old, new) = do
       mtc <- getMonadTycon
       let altLam = mkSimpleAlt LambdaExpr
-            (noLoc (HsVar noExtField (noLoc new)))
+            (noLocA (HsVar noExtField (noLocA new)))
               [everywhere (mkT (rmNondet mtc)) (removeOtherPatterns new p')]
           mgtcLam = MatchGroupTc [Scaled Many ty'] (varType new)
-          mgLam = MG mgtcLam (noLoc [noLoc altLam]) Generated
+          mgLam = MG mgtcLam (noLocA [noLocA altLam]) Generated
       lam <- matchExpr (HsLam noExtField mgLam)
-      let bdy = HsApp noExtField (noLoc (HsPar noExtField (noLoc lam))) pe
-          grhs = GRHS noExtField [] (noLoc bdy)
+      let bdy = HsApp noAnn (noLocA (HsPar noAnn (noLocA lam))) pe
+          grhs = GRHS noAnn [] (noLocA bdy)
           grhssSel = GRHSs noExtField [noLoc grhs]
-            (noLoc (EmptyLocalBinds noExtField))
-          ctxt = FunRhs (noLoc (varName old)) Prefix NoSrcStrict
-          alt = Match noExtField ctxt [] grhssSel
+            (EmptyLocalBinds noExtField)
+          ctxt = FunRhs (noLocA (varName old)) Prefix NoSrcStrict
+          alt = Match noAnn ctxt [] grhssSel
           mgtc = MatchGroupTc [] (varType new)
-          mg = MG mgtc (noLoc [noLoc alt]) Generated
-      return (noLoc (FunBind WpHole (noLoc old) mg []))
+          mg = MG mgtc (noLocA [noLocA alt]) Generated
+      return (noLocA (FunBind WpHole (noLocA old) mg []))
 
     -- rename all variables in the pattern and remove all laziness in pattern
     prepareSelPat (L l1 p1) = first (L l1) <$> case p1 of
@@ -316,7 +318,7 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
         v' <- freshVar (Scaled (varMult v) (varType v))
         return (NPlusKPat x (L l2 v') lit1 lit2 se1 se2, [(v,v')])
       SigPat x p2 ty' -> first (flip (SigPat x) ty') <$> prepareSelPat p2
-      XPat (CoPat a p2 c) -> do (L _ p3, vs) <- prepareSelPat (noLoc p2)
+      XPat (CoPat a p2 c) -> do (L _ p3, vs) <- prepareSelPat (noLocA p2)
                                 return (XPat (CoPat a p3 c), vs)
       p2              -> return (p2, [])
 
@@ -365,7 +367,7 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
         | otherwise         -> WildPat (hsLPatType p0)
       SigPat x p2 ty'       -> flip (SigPat x) ty' $ removeOtherPatterns new p2
       XPat (CoPat b p2 c)   -> XPat (CoPat b
-                                 (unLoc (removeOtherPatterns new (noLoc p2))) c)
+                                 (unLoc (removeOtherPatterns new (noLocA p2))) c)
       _                     -> WildPat (hsLPatType p0)
 
     removeOtherDetails new (PrefixCon tyargs ps) =
@@ -377,7 +379,7 @@ compileLetBind (L l (PatBind ty p grhss _)) = do
 
     removeOtherField new (L l1 (HsRecField ann v p1 pun)) =
       L l1 (HsRecField ann v (removeOtherPatterns new p1) pun)
-compileLetBind b@(L l (FunBind _ (L _ fname)
+compileLetBind b@(L (SrcSpanAnn _ l) (FunBind _ (L _ fname)
                (MG (MatchGroupTc args _) (L _ (L _ (Match _
                (FunRhs _ _ strict) _ _):_)) _) _)) = do
   flags <- getDynFlags
@@ -408,7 +410,7 @@ compileMatchGroup (MG mgtc@(MatchGroupTc args res)
   | null args        = do
     e <- errorExpr ctxt res >>= compileRhs alts
     let alt = mkSimpleAlt ctxt e []
-    let mg = MG mgtc (noLoc [noLoc alt]) Generated
+    let mg = MG mgtc (noLocA [noLocA alt]) Generated
     return (Left mg)
 compileMatchGroup mg@(MG (MatchGroupTc [_] _)
   (L _ (L _ (Match _ LambdaExpr [p] _):_)) _)
@@ -437,23 +439,23 @@ makeUnaryBindings ctxt vs (MG (MatchGroupTc args res) (L l alts) _) e =
       let remaining = MG (MatchGroupTc xs res) (L l alts) Generated
       exOrMG <- makeUnaryBindings LambdaExpr (v:vs) remaining e
       let bdy1 = case exOrMG of
-            Left  mg -> noLoc (HsLam noExtField mg)
+            Left  mg -> noLocA (HsLam noExtField mg)
             Right ex -> ex
 
       let mgtcLam = MatchGroupTc [x]
                       (foldr (\(Scaled a b) -> mkVisFunTy a b) res xs)
-      let patLam = VarPat noExtField (noLoc v)
+      let patLam = VarPat noExtField (noLocA v)
       let innerCtxt = if isFunCtxt ctxt then LambdaExpr else ctxt
-      let altLam = mkSimpleAlt innerCtxt bdy1 [noLoc patLam]
-      let mgLam = MG mgtcLam (noLoc [noLoc altLam]) Generated
+      let altLam = mkSimpleAlt innerCtxt bdy1 [noLocA patLam]
+      let mgLam = MG mgtcLam (noLocA [noLocA altLam]) Generated
 
       if isFunCtxt ctxt
         then do
           let mgtcTop = MatchGroupTc []
                           (foldr (\(Scaled a b) -> mkVisFunTy a b) res args)
           let bdy2 = HsLam noExtField mgLam
-          let altTop = mkSimpleAlt ctxt (noLoc bdy2) []
-          let mgTop = MG mgtcTop (noLoc [noLoc altTop]) Generated
+          let altTop = mkSimpleAlt ctxt (noLocA bdy2) []
+          let mgTop = MG mgtcTop (noLocA [noLocA altTop]) Generated
           return (Left mgTop)
         else
           return (Left mgLam)
@@ -488,23 +490,23 @@ compileGuardStmt :: LHsExpr GhcTc -> LHsExpr GhcTc -> GuardLStmt GhcTc
 compileGuardStmt err e (L _ (BindStmt (XBindStmtTc _ resty _ _) p
                               (L _ (HsVar _ (L _ v))))) = do
   let alt = mkSimpleAlt CaseAlt e [p]
-  compileMatching [v] resty [noLoc alt] err
+  compileMatching [v] resty [noLocA alt] err
 compileGuardStmt err e (L _ (BindStmt (XBindStmtTc _ resty _ _) p g)) = do
   let alt = mkSimpleAlt CaseAlt e [p]
   ty <- getTypeOrPanic g -- ok
   v <- freshVar (Scaled Many ty)
-  e' <- compileMatching [v] resty [noLoc alt] err
-  return (noLoc (mkSimpleLet Recursive g e' v ty))
+  e' <- compileMatching [v] resty [noLocA alt] err
+  return (noLocA (mkSimpleLet Recursive g e' v ty))
 compileGuardStmt err e (L _ (BodyStmt _   g _ _)) =
-  return (noLoc (HsIf noExtField g e err))
+  return (noLocA (HsIf noExtField g e err))
 compileGuardStmt _   e (L _ (LetStmt  _ b      )) =
-  return (noLoc (HsLet noExtField b e))
+  return (noLocA (HsLet noExtField b e))
 compileGuardStmt _   _ s =
   panicAny "Unexpected statement in guard" s
 
-mkLocalBinds :: LHsLocalBinds GhcTc -> LHsExpr GhcTc -> LHsExpr GhcTc
-mkLocalBinds (L _ (EmptyLocalBinds _)) e = e
-mkLocalBinds b                         e = noLoc (HsLet noExtField b e)
+mkLocalBinds :: HsLocalBinds GhcTc -> LHsExpr GhcTc -> LHsExpr GhcTc
+mkLocalBinds (EmptyLocalBinds _) e = e
+mkLocalBinds b                   e = noLocA (HsLet noExtField b e)
 
 matchOn :: Int -> [Var] -> Type -> [LMatch GhcTc (LHsExpr GhcTc)]
         -> LHsExpr GhcTc
@@ -549,7 +551,7 @@ bindVarAlt v (L _ (BangPat _ p       ), m) = bindVarAlt v (p, m)
 bindVarAlt v (L _ (LazyPat _ p       ), m) = bindVarAlt v (p, m)
 bindVarAlt v (L _ (ParPat _ p        ), m) = bindVarAlt v (p, m)
 bindVarAlt v (L _ (SigPat _ p _      ), m) = bindVarAlt v (p, m)
-bindVarAlt v (L _ (XPat (CoPat _ p _)), m) = bindVarAlt v (noLoc p, m)
+bindVarAlt v (L _ (XPat (CoPat _ p _)), m) = bindVarAlt v (noLocA p, m)
 bindVarAlt _ (_,m) = return m
 
 mkSeq :: Var -> LHsExpr GhcTc -> TcM (LHsExpr GhcTc)
@@ -559,12 +561,12 @@ mkSeq v e = do
   -- we do not use ConstraintSolver.removeNondet,
   -- as TyConMap is not available and not required
   let vty = everywhere (mkT (rmNondet mtc)) (varType v)
-  return (noLoc (HsApp noExtField (noLoc (HsApp noExtField
-    (noLoc (mkHsWrap (WpTyApp ty <.>
+  return (noLocA (HsApp noAnn (noLocA (HsApp noAnn
+    (noLocA (mkHsWrap (WpTyApp ty <.>
                       WpTyApp vty <.>
                       WpTyApp liftedRepTy)
-                     (HsVar noExtField (noLoc seqId))))
-    (noLoc (HsVar noExtField (noLoc (setVarType v vty))))))
+                     (HsVar noExtField (noLocA seqId))))
+    (noLocA (HsVar noExtField (noLocA (setVarType v vty))))))
     e))
 
 mkOtherMatch :: Int -> [Var] -> Type -> LHsExpr GhcTc
@@ -572,7 +574,7 @@ mkOtherMatch :: Int -> [Var] -> Type -> LHsExpr GhcTc
              -> TcM (LHsExpr GhcTc)
 mkOtherMatch _ _ _ _ [] =
   panicAny "Unexpected empty list of rules" ()
-mkOtherMatch _ _ _ e ((L l _, _):_) = do
+mkOtherMatch _ _ _ e ((L (SrcSpanAnn _ l) _, _):_) = do
   reportError (mkMsgEnvelope l neverQualify
     "Pattern match extensions are not supported by the plugin")
   failIfErrsM
@@ -588,9 +590,9 @@ mkConMatch n vs ty2 err eqs = do
   alts <- mkAlts v vs' ty1 ty2 err noAs
   case alts of
     Left as -> let mgtc = MatchGroupTc [Scaled Many ty1] ty2
-                   mg = MG mgtc (noLoc as) Generated
-                   e = HsCase noExtField (noLoc (HsVar noExtField (noLoc v))) mg
-               in return (noLoc e)
+                   mg = MG mgtc (noLocA as) Generated
+                   e = HsCase noExtField (noLocA (HsVar noExtField (noLocA v))) mg
+               in return (noLocA e)
     Right e -> return e
 
 -- This can Either return a List of matches if the top pattern is not lazy,
@@ -601,24 +603,24 @@ mkAlts :: Var -> [Var] -> Type -> Type -> LHsExpr GhcTc
 mkAlts v vs ty1 ty2 err eqs@((vp@(L _ (ViewPat _ e p)), _) : _) = do
   let (same, different) = partition (\(pat,_) -> sameTopCon pat vp) eqs
   alts' <- mkAlts v vs ty1 ty2 err different
-  let viewExpr = HsApp noExtField e (noLoc (HsVar noExtField (noLoc v)))
+  let viewExpr = HsApp noAnn e (noLocA (HsVar noExtField (noLocA v)))
       pty = hsLPatType p
   as <- viewAlts vs ty2 err same
   let mgtc = MatchGroupTc [Scaled Many pty] ty2
-      mkMG others = MG mgtc (noLoc (as ++ others)) Generated
-      mkCse others = HsCase noExtField (noLoc viewExpr) (mkMG others)
-      mkGrhs = GRHS noExtField []
+      mkMG others = MG mgtc (noLocA (as ++ others)) Generated
+      mkCse others = HsCase noExtField (noLocA viewExpr) (mkMG others)
+      mkGrhs = GRHS noAnn []
       mkGrhss ex = GRHSs noExtField [noLoc (mkGrhs ex)]
-                    (noLoc (EmptyLocalBinds noExtField))
+                    (EmptyLocalBinds noExtField)
       mkWild :: LHsExpr GhcTc -> Match GhcTc (LHsExpr GhcTc)
-      mkWild ex = Match noExtField CaseAlt [noLoc (WildPat pty)] (mkGrhss ex)
+      mkWild ex = Match noAnn CaseAlt [noLocA (WildPat pty)] (mkGrhss ex)
   case alts' of
-    Left remain -> Right . noLoc <$> matchExpr (mkCse [noLoc (mkWild ex)])
+    Left remain -> Right . noLocA <$> matchExpr (mkCse [noLocA (mkWild ex)])
       where
-        ex = noLoc (HsCase noExtField (noLoc (HsVar noExtField (noLoc v))) mgI)
+        ex = noLocA (HsCase noExtField (noLocA (HsVar noExtField (noLocA v))) mgI)
         mgtcI = MatchGroupTc [Scaled Many ty1] ty2
-        mgI = MG mgtcI (noLoc remain) Generated
-    Right ex   -> Right . noLoc <$> matchExpr (mkCse [noLoc (mkWild ex)])
+        mgI = MG mgtcI (noLocA remain) Generated
+    Right ex   -> Right . noLocA <$> matchExpr (mkCse [noLocA (mkWild ex)])
 mkAlts v vs ty1 ty2 err eqs@((p, alt) : _)
   | L _ (c@ConPat {}) <- p,
     L _ (RealDataCon dc) <- pat_con c,
@@ -629,18 +631,18 @@ mkAlts v vs ty1 ty2 err eqs@((p, alt) : _)
       x <- freshVar xty
       fresh <- freshVar patTy
       -- create: let x = (\a -> case a of p' -> v') v in rhs
-      let grhs = GRHS noExtField [] (noLoc (HsVar noExtField (noLoc v')))
-          rhs = GRHSs noExtField [noLoc grhs] (noLoc (EmptyLocalBinds noExtField))
-          match = Match noExtField CaseAlt [p'] rhs
+      let grhs = GRHS noAnn [] (noLocA (HsVar noExtField (noLocA v')))
+          rhs = GRHSs noExtField [noLoc grhs] (EmptyLocalBinds noExtField)
+          match = Match noAnn CaseAlt [p'] rhs
           mgtc = MatchGroupTc [patTy] (varType v')
-          mg = MG mgtc (noLoc [noLoc match]) Generated
-          cse = noLoc (HsCase noExtField (noLoc (HsVar noExtField (noLoc fresh))) mg)
-          lam = mkLam (noLoc fresh) patTy cse (varType v')
-          lamApp = mkHsApp lam (noLoc (HsVar noExtField (noLoc v)))
+          mg = MG mgtc (noLocA [noLocA match]) Generated
+          cse = noLocA (HsCase noExtField (noLocA (HsVar noExtField (noLocA fresh))) mg)
+          lam = mkLam (noLocA fresh) patTy cse (varType v')
+          lamApp = mkHsApp lam (noLocA (HsVar noExtField (noLocA v)))
 
       eqs' <- mapM flattenEq [(p, alt)]
       bdy <- compileMatching (x : vs) ty2 eqs' err
-      return $ Right $ noLoc $ mkSimpleLet NonRecursive lamApp bdy x (varType x)
+      return $ Right $ noLocA $ mkSimpleLet NonRecursive lamApp bdy x (varType x)
   | otherwise = do
     -- Assuming the first pattern is not a lazy pattern,
     -- we need every alternative with the same constructor as the first one
@@ -660,7 +662,7 @@ mkAlts v vs ty1 ty2 err eqs@((p, alt) : _)
         -- compile any remaining patterns
         bdy <- compileMatching vs ty2 [alt] err
         -- construct new pattern binding and translate that
-        let vE = noLoc (HsVar noExtField (noLoc v))
+        let vE = noLocA (HsVar noExtField (noLocA v))
         printAny "bdy" bdy
         letExpr <- matchExpr (mkSimplePatLet ty1 vE p bdy)
         printAny "let" (mkSimplePatLet ty1 vE p bdy)
@@ -669,12 +671,12 @@ mkAlts v vs ty1 ty2 err eqs@((p, alt) : _)
         -- in a new wildcard branch, or to completely replace the case,
         -- iff it is the first alternative.
         -- All remaining patterns would be overlapping, so we ignore them
-        return (Right (noLoc letExpr))
+        return (Right (noLocA letExpr))
 mkAlts _ _  ty1 _ err   [] =
-  let grhs = GRHS noExtField [] err
-      grhss = GRHSs noExtField [noLoc grhs] (noLoc (EmptyLocalBinds noExtField))
-      alt = Match noExtField CaseAlt [noLoc (WildPat ty1)] grhss
-  in return (Left [noLoc alt])
+  let grhs = GRHS noAnn [] err
+      grhss = GRHSs noExtField [noLoc grhs] (EmptyLocalBinds noExtField)
+      alt = Match noAnn CaseAlt [noLocA (WildPat ty1)] grhss
+  in return (Left [noLocA alt])
 
 viewAlts :: [Var] -> Type -> LHsExpr GhcTc
          -> [(LPat GhcTc, LMatch GhcTc (LHsExpr GhcTc))]
@@ -685,9 +687,9 @@ viewAlts vs ty2 err ((curr@((L _ (ViewPat _ _ p)), L l _))
   (p', vs',_) <- flattenPat p
   curr' <- flattenEq curr
   bdy <- compileMatching (vs' ++ vs) ty2 [curr'] err
-  let grhs = GRHS noExtField [] bdy
-  let grhss = GRHSs noExtField [noLoc grhs] (noLoc (EmptyLocalBinds noExtField))
-  let a = L l (Match noExtField CaseAlt [p'] grhss)
+  let grhs = GRHS noAnn [] bdy
+  let grhss = GRHSs noExtField [noLoc grhs] (EmptyLocalBinds noExtField)
+  let a = L l (Match noAnn CaseAlt [p'] grhss)
   restAlts <- viewAlts vs ty2 err rest
   return (a : restAlts)
 viewAlts _  _   _   alts =
@@ -699,17 +701,17 @@ viewAlts _  _   _   alts =
 mkNaturalOrSimpleAlt :: Type -> Type -> Var -> LHsExpr GhcTc -> LPat GhcTc
                      -> Either [LMatch GhcTc (LHsExpr GhcTc)] (LHsExpr GhcTc)
                      -> Either [LMatch GhcTc (LHsExpr GhcTc)] (LHsExpr GhcTc)
-mkNaturalOrSimpleAlt ty1 ty2 v e1 (L l (LitPat _ lit)) alts
+mkNaturalOrSimpleAlt ty1 ty2 v e1 (L l@(SrcSpanAnn _ l') (LitPat _ lit)) alts
   | isStringLit lit =
     mkNaturalOrSimpleAlt ty1 ty2 v e1 (L l (NPat
       strTy
-      (L l (OverLit
+      (L l' (OverLit
         (OverLitTc False strTy)
         (HsIsString (stringLitSourceText lit) (stringLitFastString lit))
-        (HsLit noExtField lit)))
+        (HsLit noAnn lit)))
       Nothing
       (SyntaxExprTc
-        (HsVar noExtField (noLoc (mkGlobalVar
+        (HsVar noExtField (noLocA (mkGlobalVar
            VanillaId eqStringName
            (mkVisFunTyMany strTy (mkVisFunTyMany strTy boolTy))
            vanillaIdInfo)))
@@ -718,30 +720,30 @@ mkNaturalOrSimpleAlt ty1 ty2 v e1 (L l (LitPat _ lit)) alts
   where strTy = mkTyConApp listTyCon [mkTyConTy charTyCon]
 mkNaturalOrSimpleAlt ty1 ty2 v e1 (L _ (NPat _ (L _ (OverLit _ _ l)) neg
   (SyntaxExprTc eq [argWQ1, argWQ2] resWQ))) alts =
-  let ve = HsVar noExtField (noLoc v)
+  let ve = HsVar noExtField (noLocA v)
       l' = case neg of
              Just (SyntaxExprTc en [argWN] resWN) ->
-               mkHsWrap resWN (HsApp noExtField (noLoc en)
-                                (noLoc (mkHsWrap argWN l)))
+               mkHsWrap resWN (HsApp noAnn (noLocA en)
+                                (noLocA (mkHsWrap argWN l)))
              _ -> l
-      if1 = noLoc (mkHsWrap resWQ
-              (HsApp noExtField (noLoc (HsApp noExtField
-                (noLoc eq)
-                (noLoc (mkHsWrap argWQ1 l'))))
-                (noLoc (mkHsWrap argWQ2 ve))))
+      if1 = noLocA (mkHsWrap resWQ
+              (HsApp noAnn (noLocA (HsApp noAnn
+                (noLocA eq)
+                (noLocA (mkHsWrap argWQ1 l'))))
+                (noLocA (mkHsWrap argWQ2 ve))))
       if2 = e1
       if3 = case alts of
               Left as ->
                 let mgtc = MatchGroupTc [Scaled Many ty1] ty2
-                    mg = MG mgtc (noLoc as) Generated
-                in noLoc (HsCase noExtField (noLoc ve) mg)
+                    mg = MG mgtc (noLocA as) Generated
+                in noLocA (HsCase noExtField (noLocA ve) mg)
               Right e2 -> e2
-  in Right (noLoc (HsIf noExtField if1 if2 if3))
+  in Right (noLocA (HsIf noExtField if1 if2 if3))
 mkNaturalOrSimpleAlt _ _ _ e1 p (Left as) =
-  Left (noLoc (mkSimpleAlt CaseAlt e1 [p]) : as)
+  Left (noLocA (mkSimpleAlt CaseAlt e1 [p]) : as)
 mkNaturalOrSimpleAlt ty1 _ _ e1 p (Right e2) =
-  Left [ noLoc (mkSimpleAlt CaseAlt e1 [p])
-       , noLoc (mkSimpleAlt CaseAlt e2 [noLoc (WildPat ty1)])]
+  Left [ noLocA (mkSimpleAlt CaseAlt e1 [p])
+       , noLocA (mkSimpleAlt CaseAlt e2 [noLocA (WildPat ty1)])]
 
 preprocessAs :: Var -> (LPat GhcTc, LMatch GhcTc (LHsExpr GhcTc))
              -> (LPat GhcTc, LMatch GhcTc (LHsExpr GhcTc))
@@ -777,29 +779,29 @@ flattenPat (L l (ParPat x p   )) =
   (\(a,b,c) -> (L l (ParPat x a), b, c)) <$> flattenPat p
 flattenPat (L l (BangPat x p  )) =
    (\(a,b,c) -> (L l (BangPat x a), b, c)) <$> flattenPat p
-flattenPat p@(L l (ListPat (ListPatTc _ (Just _)) _ )) = do
+flattenPat p@(L (SrcSpanAnn _ l) (ListPat (ListPatTc _ (Just _)) _ )) = do
   reportError (mkMsgEnvelope l neverQualify
     "Overloaded lists are not supported by the plugin")
   failIfErrsM
   return (p, [], [])
 flattenPat (L l (ListPat (ListPatTc ty Nothing) [] )) = do
-  let dc = noLoc (RealDataCon nilDataCon)
+  let dc = noLocA (RealDataCon nilDataCon)
   let res = L l (ConPat (ConPatTc [ty] [] [] (EvBinds emptyBag) WpHole)
                    dc (PrefixCon [] []))
   return (res, [], [])
 flattenPat (L l (ListPat tc@(ListPatTc ty Nothing) (x:xs))) = do
   v1 <- mkVar ty
   v2 <- mkVar (mkTyConApp listTyCon [ty])
-  let dc = noLoc (RealDataCon consDataCon)
-  let c  = PrefixCon [] [ noLoc (VarPat noExtField (noLoc v1))
-                        , noLoc (VarPat noExtField (noLoc v2))]
+  let dc = noLocA (RealDataCon consDataCon)
+  let c  = PrefixCon [] [ noLocA (VarPat noExtField (noLocA v1))
+                        , noLocA (VarPat noExtField (noLocA v2))]
   let res = L l (ConPat (ConPatTc [ty] [] [] (EvBinds emptyBag) WpHole) dc c)
-  return (res, [v1, v2], [x, noLoc (ListPat tc xs)])
+  return (res, [v1, v2], [x, noLocA (ListPat tc xs)])
 flattenPat (L l (TuplePat tys ps b)) =
   (\vs -> (L l (TuplePat tys (map mkVarPat vs) b), vs, ps))
   <$> mapM mkVar tys
 flattenPat (L l (SumPat tys p t a)) =
-  (\v -> (L l (SumPat tys (noLoc (VarPat noExtField (noLoc v))) t a), [v], [p]))
+  (\v -> (L l (SumPat tys (noLocA (VarPat noExtField (noLocA v))) t a), [v], [p]))
   <$> mkVar (tys !! t)
 flattenPat (L l cn@ConPat {}) =
   let argtys = cpt_arg_tys (pat_con_ext cn)
@@ -809,7 +811,7 @@ flattenPat (L l cn@ConPat {}) =
 flattenPat (L _ (ViewPat _ _ p')) = flattenPat p'
   -- seems weird, cut the matching on the view is handled somewhere else.
   -- We are only interested in what is left to match on the inner patttern
-flattenPat p@(L l (SplicePat _ _)) = do
+flattenPat p@(L (SrcSpanAnn _ l) (SplicePat _ _)) = do
   reportError (mkMsgEnvelope l neverQualify
     "Template Haskell is not supported by the plugin")
   failIfErrsM
@@ -821,13 +823,13 @@ flattenPat (L l (SigPat x p ty)) =
   (\(a,b,c) -> (L l (SigPat x a ty), b, c)) <$> flattenPat p
 flattenPat (L l (XPat (CoPat co p w))) =
   (\(a,b,c) -> (L l (XPat (CoPat co (unLoc a) w)), b, c))
-    <$> flattenPat (noLoc p)
+    <$> flattenPat (noLocA p)
 
 flattenConPatDetails :: HsConPatDetails GhcTc -> [Scaled Type] -> [Type]
                      -> TcM (HsConPatDetails GhcTc, [Var], [LPat GhcTc])
 flattenConPatDetails (PrefixCon tyargs args) tys _ = do
   vs <- mapM (\(Scaled _ ty) -> mkVar ty) tys
-  return (PrefixCon tyargs (map (noLoc . VarPat noExtField . noLoc ) vs), vs, args)
+  return (PrefixCon tyargs (map (noLocA . VarPat noExtField . noLocA ) vs), vs, args)
 flattenConPatDetails (RecCon (HsRecFields flds d)) _ tys = do
   (flds', vs, args) <- unzip3 <$> mapM (flattenRecField tys) flds
   return (RecCon (HsRecFields flds' d), concat vs, concat args)
@@ -841,7 +843,7 @@ flattenRecField :: [Type] -> LHsRecField GhcTc (LPat GhcTc)
 flattenRecField tys (L l (HsRecField ann idt p pn)) = do
   let ty = funResultTy (instantiateWith tys (varType (extFieldOcc (unLoc idt))))
   v <- mkVar ty
-  let p' = noLoc (VarPat noExtField (noLoc v))
+  let p' = noLocA (VarPat noExtField (noLocA v))
   return (L l (HsRecField ann idt p' pn), [v], [p])
 
 mkVar :: Type -> TcM Var
@@ -900,7 +902,7 @@ isConstrPat (L _ (LitPat _ _   ))      = True
 isConstrPat (L _ NPat {}        )      = True
 isConstrPat (L _ NPlusKPat {}   )      = False
 isConstrPat (L _ (SigPat _ p _ ))      = isConstrPat p
-isConstrPat (L _ (XPat (CoPat _ p _))) = isConstrPat (noLoc p)
+isConstrPat (L _ (XPat (CoPat _ p _))) = isConstrPat (noLocA p)
 
 isVarPat :: LPat GhcTc -> Bool
 isVarPat (L _ (WildPat _    ))      = True
@@ -919,7 +921,7 @@ isVarPat (L _ (LitPat _ _   ))      = False
 isVarPat (L _ NPat {}        )      = False
 isVarPat (L _ NPlusKPat {}   )      = False
 isVarPat (L _ (SigPat _ p _ ))      = isVarPat p
-isVarPat (L _ (XPat (CoPat _ p _))) = isVarPat (noLoc p)
+isVarPat (L _ (XPat (CoPat _ p _))) = isVarPat (noLocA p)
 
 isBangPat :: LPat GhcTc -> Bool
 isBangPat (L _ (WildPat _         )) = False
@@ -938,7 +940,7 @@ isBangPat (L _ (LitPat _ _        )) = False
 isBangPat (L _ NPat {}             ) = False
 isBangPat (L _ NPlusKPat {}        ) = False
 isBangPat (L _ (SigPat _ p _      )) = isBangPat p
-isBangPat (L _ (XPat (CoPat _ p _))) = isBangPat (noLoc p)
+isBangPat (L _ (XPat (CoPat _ p _))) = isBangPat (noLocA p)
 
 isNoLazyPat :: LPat GhcTc -> Bool
 isNoLazyPat (L _ (WildPat _         )) = True
@@ -957,7 +959,7 @@ isNoLazyPat (L _ (LitPat _ _        )) = True
 isNoLazyPat (L _ NPat {}             ) = True
 isNoLazyPat (L _ NPlusKPat {}        ) = True
 isNoLazyPat (L _ (SigPat _ p _      )) = isNoLazyPat p
-isNoLazyPat (L _ (XPat (CoPat _ p _))) = isNoLazyPat (noLoc p)
+isNoLazyPat (L _ (XPat (CoPat _ p _))) = isNoLazyPat (noLocA p)
 
 -- this is more delicate than it seems,
 -- as we have to make sure that ListPat and TuplePat are "the same" as their
@@ -1000,9 +1002,9 @@ sameTopCon (L _ (NPlusKPat _ _ (L _ l1) _ _ _))
 sameTopCon (L _ (SigPat _ p1 _)) p2                       = sameTopCon p1 p2
 sameTopCon p1 (L _ (SigPat _ p2 _))                       = sameTopCon p1 p2
 sameTopCon p1 (L _ (XPat (CoPat _ p2 _)))                 = sameTopCon p1 p2'
-  where p2' = noLoc p2
+  where p2' = noLocA p2
 sameTopCon (L _ (XPat (CoPat _ p1 _))) p2                 = sameTopCon p1' p2
-  where p1' = noLoc p1
+  where p1' = noLocA p1
 sameTopCon _ _ = False
 
 sameConLike :: ConLike -> ConLike -> Bool
@@ -1070,7 +1072,7 @@ errorStrStmt (TransStmtCtxt _) =
   mkErrorLit "Non-exhaustive patterns in a branch of a transform statement"
 
 mkErrorLit :: String -> LHsExpr GhcTc
-mkErrorLit = noLoc . HsLit noExtField . HsString NoSourceText . mkFastString
+mkErrorLit = noLocA . HsLit noAnn . HsString NoSourceText . mkFastString
 
 mkErrorWith :: Type -> String -> TcM (LHsExpr GhcTc)
 mkErrorWith ty s = do
@@ -1081,6 +1083,6 @@ mkErrorWith ty s = do
               (mkVisFunTyMany (mkListTy charTy) (mkTyVarTy tv))
   errId <- flip setVarType ty' <$>
             (tcLookupId =<< lookupOrig mdl ( mkVarOcc "pE" ))
-  return (noLoc (HsApp noExtField
-    (noLoc (mkHsWrap (WpTyApp ty) (HsVar noExtField (noLoc errId))))
+  return (noLocA (HsApp noAnn
+    (noLocA (mkHsWrap (WpTyApp ty) (HsVar noExtField (noLocA errId))))
     (mkErrorLit s)))

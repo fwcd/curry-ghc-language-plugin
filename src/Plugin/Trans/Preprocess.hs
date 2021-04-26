@@ -13,6 +13,7 @@ module Plugin.Trans.Preprocess (preprocessBinding) where
 
 import Data.Syb
 
+import GHC.Parser.Annotation (noLocA, SrcSpanAnn' (..))
 import GHC.Plugins
 import GHC.Hs.Binds
 import GHC.Hs.Extension
@@ -153,9 +154,9 @@ preprocessExpr tcs (L l (HsLet x bs e)) = do
 preprocessExpr tcs (L l1 (HsDo x ctxt (L l2 stmts))) = do
   stmts' <- preprocessStmts tcs stmts
   return (L l1 (HsDo x ctxt (L l2 stmts')))
-preprocessExpr tcs (L l (ExplicitList x Nothing es)) = do
+preprocessExpr tcs (L l (ExplicitList x es)) = do
   es' <- mapM (preprocessExpr tcs) es
-  return (L l (ExplicitList x Nothing es'))
+  return (L l (ExplicitList x es'))
 preprocessExpr _ e@(L l (ExplicitList _ (Just _) _)) = do
   reportError (mkMsgEnvelope l neverQualify
     "Overloaded lists are not supported by the plugin")
@@ -292,7 +293,7 @@ preprocessStmts tcs (s:ss) = do
 
 preprocessSynExpr :: TyConMap -> SyntaxExprTc -> TcM (SyntaxExpr GhcTc)
 preprocessSynExpr tcs (SyntaxExprTc e ws w) = do
-  e' <- unLoc <$> preprocessExpr tcs (noLoc e)
+  e' <- unLoc <$> preprocessExpr tcs (noLocA e)
   return (SyntaxExprTc e' ws w)
 preprocessSynExpr _ NoSyntaxExprTc = return NoSyntaxExprTc
 

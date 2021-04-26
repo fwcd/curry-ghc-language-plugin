@@ -20,7 +20,7 @@ import Data.ByteString                ( unpack )
 
 import GHC.HsToCore
 import GHC.ThToHs
-import GHC.Parser.Annotation          ( noLocA )
+import GHC.Parser.Annotation          ( LocatedAn, noLocA )
 import GHC.Plugins
 import GHC.Hs.Extension
 import GHC.Hs.Expr
@@ -151,7 +151,7 @@ printBndrUnsafe str a = do
 
 -- |Apply a monadic action to all elements in a bag with source location
 -- annotations.
-liftBag :: Monad m => (a -> m b) -> Bag (Located a) -> m (Bag (Located b))
+liftBag :: Monad m => (a -> m b) -> Bag (LocatedAn an a) -> m (Bag (LocatedAn an b))
 liftBag = mapBagM . liftL
 
 -- | Temporarily set the given global compiler flags for the excecution of the
